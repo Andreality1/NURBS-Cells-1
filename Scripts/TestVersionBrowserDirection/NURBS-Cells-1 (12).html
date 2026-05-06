@@ -193,7 +193,7 @@
                 </div>
             </div>
             <div class="editor-container">
-                <div id="line-numbers">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23<br>24<br>25<br>26<br>27<br>28<br>29<br>30<br>31<br>32<br>33<br>34<br>35<br>36<br>37<br>38<br>39<br>40<br>41<br>42<br>43<br>44<br>45<br>46<br>47<br>48<br>49<br>50<br>51<br>52<br>53<br>54<br>55<br>56<br>57<br>58<br>59<br>60<br>61<br>62<br>63<br>64<br>65<br>66<br>67<br>68<br>69<br>70<br>71<br>72<br>73<br>74<br>75<br>76<br>77<br>78<br>79<br>80<br>81<br>82<br>83<br>84<br>85<br>86<br>87<br>88<br>89<br>90<br>91<br>92<br>93<br>94<br>95<br>96<br>97<br>98<br>99<br>100<br>101<br>102<br>103<br>104<br>105<br>106<br>107<br>108<br>109<br>110<br>111<br>112<br>113<br>114<br>115<br>116<br>117<br>118<br>119<br>120<br>121<br>122<br>123<br>124<br>125<br>126<br>127<br>128<br>129<br>130<br>131<br>132<br>133<br>134<br>135<br>136<br>137<br>138<br>139<br>140<br>141<br>142<br>143<br>144<br>145<br>146<br>147<br>148<br>149<br>150<br>151<br>152<br>153<br>154<br>155<br>156<br>157<br>158<br>159<br>160<br>161<br>162<br>163<br>164<br>165<br>166<br>167<br>168<br>169<br>170<br>171<br>172</div>
+                <div id="line-numbers">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23<br>24<br>25<br>26<br>27<br>28<br>29<br>30<br>31<br>32<br>33<br>34<br>35<br>36<br>37<br>38<br>39<br>40<br>41<br>42<br>43<br>44<br>45<br>46<br>47<br>48<br>49<br>50<br>51<br>52<br>53<br>54<br>55<br>56<br>57<br>58<br>59<br>60<br>61<br>62<br>63<br>64<br>65<br>66<br>67<br>68<br>69<br>70<br>71<br>72<br>73<br>74<br>75<br>76<br>77<br>78<br>79<br>80<br>81<br>82<br>83<br>84<br>85<br>86<br>87<br>88<br>89<br>90<br>91<br>92<br>93<br>94<br>95<br>96<br>97<br>98<br>99<br>100<br>101<br>102<br>103<br>104<br>105<br>106<br>107<br>108<br>109<br>110<br>111<br>112<br>113<br>114<br>115<br>116<br>117<br>118<br>119<br>120<br>121<br>122<br>123<br>124<br>125<br>126<br>127<br>128<br>129<br>130<br>131<br>132<br>133<br>134<br>135<br>136<br>137<br>138<br>139<br>140<br>141<br>142<br>143<br>144<br>145<br>146<br>147<br>148<br>149<br>150<br>151<br>152<br>153<br>154<br>155<br>156<br>157<br>158<br>159<br>160<br>161<br>162<br>163<br>164<br>165<br>166<br>167<br>168<br>169<br>170<br>171<br>172<br>173<br>174<br>175<br>176<br>177<br>178<br>179<br>180<br>181<br>182<br>183<br>184<br>185<br>186</div>
                 <textarea id="shaderEditor" spellcheck="false" oninput="updateLineNumbers()" onscroll="syncScroll()">#version 300 es
 precision highp float;
 
@@ -201,16 +201,23 @@ uniform float u_time;
 uniform vec2 u_resolution;
 out vec4 outColor;
 
-const int MAX_STEPS = 100;
-const float SURF_DIST = 0.005;
-const float MAX_DIST = 20.0;
+const int MAX_STEPS = 128;
+const float SURF_DIST = 0.001;
+const float MAX_DIST = 40.0;
 
 struct ControlPoint {
     vec3 pos;
     float weight;
 };
 
-// --- RATIONAL QUADRATIC NURBS MATH ---
+struct Hit {
+    float dist;
+    vec2 uv;
+    float id; 
+};
+
+// --- NURBS MATHEMATICS ---
+
 vec3 getBasis(float t) {
     float invT = 1.0 - t;
     return vec3(invT * invT, 2.0 * t * invT, t * t);
@@ -219,153 +226,160 @@ vec3 getBasis(float t) {
 vec3 getPatchPoint(float u, float v, ControlPoint cp[9]) {
     vec3 bU = getBasis(u);
     vec3 bV = getBasis(v);
-    vec3 pointSum = vec3(0.0);
-    float weightSum = 0.0;
+    vec3 pSum = vec3(0.0);
+    float wSum = 0.0;
+    
     for (int i = 0; i &lt; 3; i++) {
         for (int j = 0; j &lt; 3; j++) {
             float w = bU[i] * bV[j] * cp[i * 3 + j].weight;
-            pointSum += cp[i * 3 + j].pos * w;
-            weightSum += w;
+            pSum += cp[i * 3 + j].pos * w;
+            wSum += w;
         }
     }
-    return pointSum / weightSum;
+    return pSum / max(wSum, 0.00001);
 }
 
-float sdSphere(vec3 p, vec3 center, float radius) {
-    return length(p - center) - radius;
-}
-
-// --- TILEABLE SCENE SDF ---
-float sceneSDF(vec3 p) {
-    // 1. Tiling Logic
-    // Each patch is 2.0 units wide (from -1.0 to 1.0)
-    vec2 cellSize = vec2(2.0); 
-    vec2 cellID = floor((p.xz + 1.0) / cellSize);
-    vec3 localP = p;
-    // Map world P to local cell space [-1.0, 1.0]
-    localP.xz = mod(p.xz + 1.0, cellSize) - 1.0;
-
-    ControlPoint cp[9];
-    
-    // 2. Coherent Control Point Generation
-    // We use the cellID to ensure edges match neighbors
-    for(int i = 0; i &lt; 3; i++) {
-        for(int j = 0; j &lt; 3; j++) {
-            // Global grid indices
-            float gI = cellID.x * 2.0 + float(i);
-            float gJ = cellID.y * 2.0 + float(j);
-            
-            float x = float(i) - 1.0;
-            float z = float(j) - 1.0;
-            
-            // The wave must be calculated based on global grid indices (gI, gJ)
-            // so that the boundary points are calculated identically by adjacent cells.
-            float yOffset = sin(u_time * 1.5 + gI * 0.8 + gJ * 0.8) * 0.35;
-            
-            // Center weights are higher to create the NURBS "pull"
-            float w = (i == 1 &amp;&amp; j == 1) ? 2.5 : 1.0;
-            cp[i*3+j] = ControlPoint(vec3(x, yOffset, z), w);
-        }
-    }
-
-    // 3. Newton-Raphson Surface Projection
-    vec2 bestUV = vec2(0.5);
+Hit getNURBSSDF(vec3 p, ControlPoint cp[9]) {
+    vec2 uv = vec2(0.5);
     float minDistSq = 1e10;
-    const int GRID_RES = 4; 
     
-    // Initial Grid Search
-    for(int i = 0; i &lt;= GRID_RES; i++) {
-        for(int j = 0; j &lt;= GRID_RES; j++) {
-            vec2 uv = vec2(float(i)/float(GRID_RES), float(j)/float(GRID_RES));
-            vec3 pSurf = getPatchPoint(uv.x, uv.y, cp);
-            float dSq = dot(localP - pSurf, localP - pSurf);
-            if(dSq &lt; minDistSq) { 
-                minDistSq = dSq; 
-                bestUV = uv; 
+    const int GRID = 8; 
+    for(int i = 0; i &lt;= GRID; i++) {
+        for(int j = 0; j &lt;= GRID; j++) {
+            vec2 testUV = vec2(float(i)/float(GRID), float(j)/float(GRID));
+            vec3 pS = getPatchPoint(testUV.x, testUV.y, cp);
+            float d2 = dot(p - pS, p - pS);
+            if(d2 &lt; minDistSq) { 
+                minDistSq = d2; 
+                uv = testUV; 
             }
         }
     }
-
-    // Refinement
-    for(int i = 0; i &lt; 5; i++) {
-        vec3 surfP = getPatchPoint(bestUV.x, bestUV.y, cp);
-        float eps = 0.001;
-        vec3 dSdu = (getPatchPoint(bestUV.x + eps, bestUV.y, cp) - surfP) / eps;
-        vec3 dSdv = (getPatchPoint(bestUV.x, bestUV.y + eps, cp) - surfP) / eps;
-        vec3 r = surfP - localP;
-        float gU = dot(r, dSdu);
-        float gV = dot(r, dSdv);
-        float damping = 0.1;
-        bestUV.x -= gU / (dot(dSdu, dSdu) + damping);
-        bestUV.y -= gV / (dot(dSdv, dSdv) + damping);
-        bestUV = clamp(bestUV, 0.0, 1.0);
+    
+    for(int i = 0; i &lt; 6; i++) {
+        vec3 pS = getPatchPoint(uv.x, uv.y, cp);
+        float e = 0.01;
+        vec3 du = (getPatchPoint(uv.x + e, uv.y, cp) - pS) / e;
+        vec3 dv = (getPatchPoint(uv.x, uv.y + e, cp) - pS) / e;
+        vec3 r = pS - p;
+        float a = dot(du, du);
+        float b = dot(du, dv);
+        float c = dot(dv, dv);
+        float det = a * c - b * b;
+        vec2 delta = vec2(dot(r, du) * c - dot(r, dv) * b, 
+                          dot(r, dv) * a - dot(r, du) * b) / (det + 0.001);
+        uv = clamp(uv - delta * 0.5, 0.0, 1.0); 
     }
 
-    vec3 finalSurfP = getPatchPoint(bestUV.x, bestUV.y, cp);
-    float surfaceDist = length(localP - finalSurfP) - 0.03;
-
-    // 4. Boundary Connector Spheres
-    float d1 = sdSphere(localP, cp[0].pos, 0.08);
-    float d2 = sdSphere(localP, cp[2].pos, 0.08);
-    float d3 = sdSphere(localP, cp[6].pos, 0.08);
-    float d4 = sdSphere(localP, cp[8].pos, 0.08);
-    float spheresDist = min(min(d1, d2), min(d3, d4));
-
-    return min(surfaceDist, spheresDist);
+    vec3 pOnSurface = getPatchPoint(uv.x, uv.y, cp);
+    return Hit(length(p - pOnSurface) - 0.04, uv, 1.0);
 }
 
+// --- SCENE SETUP ---
+
+Hit sceneSDF(vec3 p) {
+    ControlPoint cp[9];
+    float radius = 4.0;
+    
+    for(int i = 0; i &lt; 3; i++) {
+        for(int j = 0; j &lt; 3; j++) {
+            int idx = i * 3 + j;
+            
+            float rowOffset = float(i - 1); 
+            float colOffset = float(j - 1);
+            
+            // Static grid positions
+            float x = colOffset * radius;
+            float z = rowOffset * radius;
+            vec3 pos = vec3(x, 0.0, z);
+            
+            // Only corners (0,0), (0,2), (2,0), (2,2) oscillate
+            if ((i == 0 || i == 2) &amp;&amp; (j == 0 || j == 2)) {
+                vec3 dir = normalize(pos); // Vector from center to corner
+                float movement = sin(u_time * 1.5) * 2.0;
+                pos += dir * movement;
+            }
+
+            float weight = 1.0;
+            if (abs(rowOffset) &gt; 0.1 &amp;&amp; abs(colOffset) &gt; 0.1) {
+                weight = 0.707; 
+            }
+            
+            cp[idx] = ControlPoint(pos, weight);
+        }
+    }
+
+    Hit surface = getNURBSSDF(p, cp);
+    
+    float dSpheres = 1e10;
+    for(int i = 0; i &lt; 9; i++) {
+        dSpheres = min(dSpheres, length(p - cp[i].pos) - 0.15);
+    }
+
+    if(dSpheres &lt; surface.dist) {
+        return Hit(dSpheres, vec2(0.0), 2.0);
+    }
+    
+    return surface;
+}
+
+// --- RENDERING ---
+
 vec3 getNormal(vec3 p) {
-    vec2 e = vec2(0.001, 0.0);
+    vec2 e = vec2(0.002, 0.0);
     return normalize(vec3(
-        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
-        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
-        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+        sceneSDF(p + e.xyy).dist - sceneSDF(p - e.xyy).dist,
+        sceneSDF(p + e.yxy).dist - sceneSDF(p - e.yxy).dist,
+        sceneSDF(p + e.yyx).dist - sceneSDF(p - e.yyx).dist
     ));
 }
 
 void main() {
-    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+    vec2 uv_scr = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.y, u_resolution.x);
     
-    // Move the camera to show the tiling
-    float ang = u_time * 0.1;
-    vec3 ro = vec3(cos(ang)*5.0, 3.0, sin(ang)*5.0);
+    float camAngle = u_time * 0.15;
+    vec3 ro = vec3(cos(camAngle) * 14.0, 10.0, sin(camAngle) * 14.0);
     vec3 target = vec3(0, 0, 0);
-    vec3 cw = normalize(target - ro);
-    vec3 cu = normalize(cross(cw, vec3(0,1,0)));
-    vec3 cv = cross(cu, cw);
-    vec3 rd = normalize(uv.x * cu + uv.y * cv + 1.5 * cw);
+    
+    vec3 f = normalize(target - ro);
+    vec3 r = normalize(cross(vec3(0, 1, 0), f));
+    vec3 u = cross(f, r);
+    vec3 rd = normalize(f * 2.0 + uv_scr.x * r + uv_scr.y * u);
 
-    float t = 0.0;
+    float d = 0.0;
+    Hit hit;
     for(int i = 0; i &lt; MAX_STEPS; i++) {
-        float d = sceneSDF(ro + t * rd);
-        if(d &lt; SURF_DIST || t &gt; MAX_DIST) break;
-        t += d * 0.6; // Slightly conservative step for NURBS stability
+        hit = sceneSDF(ro + d * rd);
+        if(abs(hit.dist) &lt; SURF_DIST || d &gt; MAX_DIST) break;
+        d += hit.dist * 0.6; // Relaxed step for better surface convergence
     }
 
-    vec3 color = vec4(0.08, 0.1, 0.15, 1.0).rgb; // Fog/Background
+    vec3 background = vec3(0.02, 0.02, 0.04);
+    vec3 color = background;
 
-    if(t &lt; MAX_DIST) {
-        vec3 p = ro + t * rd;
+    if(d &lt; MAX_DIST) {
+        vec3 p = ro + d * rd;
         vec3 n = getNormal(p);
-        vec3 l = normalize(vec3(1.0, 5.0, 2.0));
+        vec3 l = normalize(vec3(5, 10, 5));
         
         float diff = max(dot(n, l), 0.0);
         float spec = pow(max(dot(reflect(-l, n), -rd), 0.0), 32.0);
         
-        // Coloring based on world position to highlight seams
-        vec3 baseColor = 0.5 + 0.5 * cos(p.x * 0.5 + vec3(0, 2, 4));
-        if (fract(p.x * 0.5 + 0.5) &lt; 0.02 || fract(p.z * 0.5 + 0.5) &lt; 0.02) {
-            baseColor = vec3(1.0); // Highlight the edge of the patch
+        if(hit.id == 1.0) {
+            float checker = mod(floor(hit.uv.x * 10.0) + floor(hit.uv.y * 10.0), 2.0);
+            vec3 albedo = mix(vec3(0.1, 0.4, 0.7), vec3(0.05, 0.15, 0.3), checker);
+            color = albedo * (diff + 0.2) + spec * 0.4;
+        } else {
+            // Bright red for the control point spheres
+            color = vec3(1.0, 0.1, 0.1) * (diff + 0.5) + spec;
         }
-        
-        color = baseColor * (diff + 0.2) + spec * 0.3;
-        
         // Distance fog
-        color = mix(color, vec3(0.08, 0.1, 0.15), 1.0 - exp(-0.05 * t));
+        color = mix(color, background, 1.0 - exp(-0.001 * d * d));
     }
 
+    // Gamma correction
     outColor = vec4(pow(color, vec3(0.4545)), 1.0);
-}            </textarea>
+}</textarea>
             </div>
         </div>
 
@@ -374,7 +388,7 @@ void main() {
                 <span>System Output</span>
                 <span id="term-status-icon">▼</span>
             </div>
-            <div id="terminal"><div class="log-entry update"><span class="time">[221ms]</span><span class="content">Shader Compiled Successfully</span></div><div class="log-entry update"><span class="time">[224ms]</span><span class="content">Time: 5.93s | FPS: 144</span></div></div>
+            <div id="terminal"><div class="log-entry update"><span class="time">[221ms]</span><span class="content">Shader Compiled Successfully</span></div><div class="log-entry update"><span class="time">[224ms]</span><span class="content">Time: 5.93s | FPS: 144</span></div><div class="log-entry update"><span class="time">[1084ms]</span><span class="content">Shader Compiled Successfully</span></div><div class="log-entry update"><span class="time">[1085ms]</span><span class="content">Time: 717.86s | FPS: 144</span></div></div>
         </div>
     </div>
 
